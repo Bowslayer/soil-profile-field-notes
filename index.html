@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Soil Profile Field Notes</title>
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; background: #f6f7f8; color: #111; }
+    header { position: sticky; top:0; background:#fff; padding:14px 16px; border-bottom:1px solid #ddd; z-index:5; }
+    h1 { margin:0; font-size:1.25rem; }
+    main { padding:16px; max-width:900px; margin:auto; }
+    .card { background:#fff; border:1px solid #ddd; border-radius:14px; padding:14px; margin-bottom:14px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+    label { display:block; font-size:.85rem; font-weight:600; margin-bottom:4px; }
+    input, textarea, select, button { font:inherit; }
+    input, textarea, select { width:100%; box-sizing:border-box; padding:10px; border:1px solid #bbb; border-radius:10px; background:#fff; }
+    textarea { min-height:74px; }
+    button { padding:11px 14px; border-radius:12px; border:1px solid #999; background:#fff; }
+    button.primary { background:#111; color:#fff; border-color:#111; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; }
+    .status { font-size:.95rem; padding:10px 12px; border-radius:10px; background:#eef1f4; margin-top:10px; }
+    .horizon { border-top:1px solid #ddd; padding-top:12px; margin-top:12px; }
+    .horizon:first-child { border-top:none; padding-top:0; margin-top:0; }
+    .question { font-size:1.1rem; font-weight:700; margin:8px 0; }
+    .muted { color:#666; font-size:.9rem; }
+  </style>
+</head>
+<body>
+<header><h1>Soil Profile Field Notes</h1><div class="muted">Build 2026-09-02 1:56 PM · HTTPS/PWA</div></header>
+<main>
+  <section class="card">
+    <div class="row">
+      <button class="primary" id="startVoice">Start Hands-Free</button>
+      <button id="stopVoice">Stop</button>
+      <button id="nextBtn">Next</button>
+      <button id="exampleBtn">Give Me an Example</button>
+    </div>
+    <div class="status" id="voiceStatus">Voice ready.</div>
+    <div class="muted" id="securityStatus" style="margin-top:8px">Field entries stay in this browser on this device unless you export them.</div>
+    <div class="question" id="currentQuestion"></div>
+    <div class="muted">You can answer naturally, say “next,” or say “give me an example.” The app repeats your answer before continuing.</div>
+  </section>
+
+  <section class="card">
+    <h2>Test Pit Details</h2>
+    <div class="grid">
+      <div><label>Location</label><input id="location"></div>
+      <div><label>Lot / Tract</label><input id="lotTract"></div>
+      <div><label>Date</label><input id="date" type="date"></div>
+      <div><label>Time</label><input id="time" type="time"></div>
+      <div><label>Elevation</label><input id="elevation"></div>
+      <div><label>Aspect</label><input id="aspect"></div>
+      <div><label>County</label><input id="county"></div>
+      <div><label>Soil Reviewer</label><input id="describedBy" value="JJ Conner"></div>
+      <div><label>Latitude</label><input id="latitude"></div>
+      <div><label>Longitude</label><input id="longitude"></div>
+    </div>
+    <div style="margin-top:10px"><label>Vegetation</label><textarea id="vegetation"></textarea></div>
+    <div class="row" style="margin-top:10px">
+      <button id="gpsBtn">Use Current GPS</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Soil Horizons</h2>
+      <button id="addHorizon">Add Horizon</button>
+    </div>
+    <div id="horizons"></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <button class="primary" id="saveJson">Save Field Notes JSON</button>
+      <button id="loadJsonBtn">Load JSON</button>
+      <input id="loadJson" type="file" accept=".json,application/json" hidden>
+    </div>
+  </section>
+</main>
+
+<script>
+const state={horizons:[],voiceActive:false,qIndex:0,recognition:null};
+const detailFields=[["location","What is the test pit location?"],["lotTract","What is the lot or tract?"],["elevation","What is the elevation?"],["aspect","What is the aspect?"],["county","What county is the test pit in?"],["vegetation","Describe the vegetation."]];
+const horizonFields=[["top","What is the top depth for Horizon {n}?"],["bottom","What is the bottom depth for Horizon {n}?"],["dryColor","What is the dry Munsell color for Horizon {n}?"],["moistColor","What is the moist Munsell color for Horizon {n}?"],["structure","What is the soil structure for Horizon {n}?"],["texture","What is the soil texture for Horizon {n}?"],["dryConsistence","What is the dry consistence for Horizon {n}?"],["moistConsistence","What is the moist consistence for Horizon {n}?"],["wetConsistence","What is the wet consistence for Horizon {n}?"],["stickiness","What is the stickiness for Horizon {n}?"],["boundaryDistinctness","What is the boundary distinctness for Horizon {n}?"],["boundaryTopography","What is the boundary topography for Horizon {n}?"],["rockPercent","What percent rock fragments are present in Horizon {n}?"],["rockSize","What is the rock fragment size for Horizon {n}?"],["rootsNotes","Describe the roots or other notes for Horizon {n}?"]];
+const examples={structure:"Examples include massive, platy, prismatic, columnar, blocky, granular, or structureless.",texture:"Examples include sand, loamy sand, sandy loam, loam, silt loam, clay loam, sandy clay, silty clay, or clay.",dryConsistence:"Examples include loose, soft, slightly hard, hard, very hard, or extremely hard.",moistConsistence:"Examples include loose, very friable, friable, firm, very firm, or extremely firm.",wetConsistence:"Describe plasticity and stickiness when wet.",stickiness:"Examples include nonsticky, slightly sticky, moderately sticky, or very sticky.",boundaryDistinctness:"Examples include abrupt, clear, gradual, or diffuse.",boundaryTopography:"Examples include smooth, wavy, irregular, or broken.",dryColor:"Use Munsell notation, for example 10YR 5/3 dry.",moistColor:"Use Munsell notation, for example 10YR 3/2 moist."};
+function nowDefaults(){const d=new Date();date.value=d.toISOString().slice(0,10);time.value=d.toTimeString().slice(0,5);describedBy.value="JJ Conner";}
+function useGPS(){const s=voiceStatus;if(!navigator.geolocation){s.textContent="GPS is not available on this device.";return;}s.textContent="Getting current GPS location…";navigator.geolocation.getCurrentPosition(p=>{latitude.value=p.coords.latitude.toFixed(6);longitude.value=p.coords.longitude.toFixed(6);s.textContent=`GPS filled: ${latitude.value}, ${longitude.value}`;scheduleLocalDraftSave();},e=>s.textContent="GPS could not be obtained: "+e.message,{enableHighAccuracy:true,timeout:15000,maximumAge:0});}
+function addHorizon(data={}){const i=state.horizons.length;const h=Object.assign({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random()),name:`Horizon ${i+1}`,top:"",bottom:"",dryColor:"",moistColor:"",structure:"",texture:"",dryConsistence:"",moistConsistence:"",wetConsistence:"",stickiness:"",boundaryDistinctness:"",boundaryTopography:"",rockPercent:"",rockSize:"",rootsNotes:""},data);h.name=`Horizon ${i+1}`;state.horizons.push(h);renderHorizons();rebuildQuestions();scheduleLocalDraftSave();}
+function renderHorizons(){horizons.innerHTML="";state.horizons.forEach((h,i)=>{const el=document.createElement("div");el.className="horizon";el.innerHTML=`<h3>Horizon ${i+1}</h3><div class="grid"></div>`;const grid=el.querySelector(".grid");horizonFields.forEach(([key])=>{const div=document.createElement("div");div.innerHTML=`<label>${labelFor(key)}</label><input data-h="${i}" data-k="${key}" value="${esc(h[key]||"")}">`;grid.appendChild(div);});horizons.appendChild(el);});horizons.querySelectorAll("input[data-h]").forEach(inp=>inp.addEventListener("input",e=>{state.horizons[+e.target.dataset.h][e.target.dataset.k]=e.target.value;scheduleLocalDraftSave();}));}
+function labelFor(k){return({top:"Top Depth",bottom:"Bottom Depth",dryColor:"Dry Color",moistColor:"Moist Color",structure:"Structure",texture:"Texture",dryConsistence:"Dry Consistence",moistConsistence:"Moist Consistence",wetConsistence:"Wet Consistence",stickiness:"Stickiness",boundaryDistinctness:"Boundary Distinctness",boundaryTopography:"Boundary Topography",rockPercent:"Rock %",rockSize:"Rock Size",rootsNotes:"Roots / Notes"})[k]||k;}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+let questions=[];function rebuildQuestions(){questions=detailFields.map(([key,q])=>({scope:"detail",key,q}));state.horizons.forEach((h,i)=>horizonFields.forEach(([key,q])=>questions.push({scope:"horizon",index:i,key,q:q.replace("{n}",i+1)})));if(state.qIndex>=questions.length)state.qIndex=Math.max(0,questions.length-1);showQuestion();}
+function showQuestion(){const q=questions[state.qIndex];currentQuestion.textContent=q?q.q:"Add a horizon to continue.";if(state.voiceActive&&q)speak(q.q);}
+function speak(text){if(!("speechSynthesis" in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.onend=()=>{if(state.voiceActive)startRecognition();};speechSynthesis.speak(u);}
+function currentKey(){return questions[state.qIndex]?.key;}
+function giveExample(){const t=examples[currentKey()]||"Give the field observation in the words you would normally use.";voiceStatus.textContent=t;speak(t);}
+function setAnswer(text){const q=questions[state.qIndex];if(!q)return;if(q.scope==="detail")document.getElementById(q.key).value=text;else{state.horizons[q.index][q.key]=text;const inp=document.querySelector(`input[data-h="${q.index}"][data-k="${q.key}"]`);if(inp)inp.value=text;}voiceStatus.textContent=`Heard: ${text}`;scheduleLocalDraftSave();speak(`I heard ${text}.`);setTimeout(nextQuestion,900);}
+function nextQuestion(){if(state.qIndex<questions.length-1)state.qIndex++;showQuestion();}
+let recognitionRestartTimer=null,recognitionStarting=false,suppressRecognitionRestart=false;
+function scheduleRecognition(delay=500){if(!state.voiceActive||suppressRecognitionRestart)return;clearTimeout(recognitionRestartTimer);recognitionRestartTimer=setTimeout(()=>{if(state.voiceActive&&!("speechSynthesis" in window&&speechSynthesis.speaking))startRecognition();},delay);}
+function startRecognition(){if(!state.voiceActive||recognitionStarting||suppressRecognitionRestart)return;const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){voiceStatus.textContent="Voice input is not available in this browser. Open this site with Chrome and allow microphone access.";return;}recognitionStarting=true;const r=new SR();state.recognition=r;r.lang="en-US";r.continuous=false;r.interimResults=false;r.maxAlternatives=1;r.onstart=()=>{recognitionStarting=false;voiceStatus.textContent="Listening…";};r.onerror=e=>{recognitionStarting=false;const err=e.error||"unknown";if(err==="aborted")return;if(err==="no-speech"){voiceStatus.textContent="Listening… I didn't hear anything yet.";scheduleRecognition(700);return;}if(err==="not-allowed"||err==="service-not-allowed"){state.voiceActive=false;voiceStatus.textContent="Microphone permission is blocked. Allow microphone access for this site in Chrome, then tap Start Hands-Free again.";return;}if(err==="network"){voiceStatus.textContent="Voice service could not connect. Check your internet connection, then tap Start Hands-Free again.";state.voiceActive=false;return;}voiceStatus.textContent="Voice problem: "+err+". Tap Start Hands-Free to retry.";scheduleRecognition(1000);};r.onend=()=>{recognitionStarting=false;if(state.recognition===r)state.recognition=null;scheduleRecognition(600);};r.onresult=e=>{const text=e.results?.[0]?.[0]?.transcript?.trim();if(!text){scheduleRecognition(500);return;}suppressRecognitionRestart=true;const low=text.toLowerCase();if(low.includes("give me an example")||low==="example"){suppressRecognitionRestart=false;giveExample();return;}if(low==="next"||low.endsWith(" next")){suppressRecognitionRestart=false;nextQuestion();return;}suppressRecognitionRestart=false;setAnswer(text);};try{r.start();}catch(e){recognitionStarting=false;if(e?.name!=="InvalidStateError")voiceStatus.textContent="Voice could not start. Tap Start Hands-Free to retry.";}}
+function startVoice(){clearTimeout(recognitionRestartTimer);suppressRecognitionRestart=false;state.voiceActive=true;voiceStatus.textContent="Hands-free mode started.";showQuestion();}
+function stopVoice(){state.voiceActive=false;suppressRecognitionRestart=true;clearTimeout(recognitionRestartTimer);if(state.recognition){try{state.recognition.abort();}catch(e){}state.recognition=null;}if("speechSynthesis" in window)speechSynthesis.cancel();recognitionStarting=false;voiceStatus.textContent="Hands-free mode stopped.";}
+const LOCAL_DRAFT_KEY="soilProfileFieldNotesDraftV1";let draftSaveTimer=null;function scheduleLocalDraftSave(){clearTimeout(draftSaveTimer);draftSaveTimer=setTimeout(()=>{try{localStorage.setItem(LOCAL_DRAFT_KEY,JSON.stringify(collect()));securityStatus.textContent="Saved locally on this device. Nothing is uploaded automatically.";}catch(e){}},250);}function restoreLocalDraft(){try{const raw=localStorage.getItem(LOCAL_DRAFT_KEY);if(!raw)return false;loadData(JSON.parse(raw));securityStatus.textContent="Restored your locally saved field draft from this device.";return true;}catch(e){return false;}}
+function updateSecureContextStatus(){if(location.protocol==="https:"||location.hostname==="localhost")securityStatus.textContent="Secure app connection. Field entries stay on this device unless you export them.";else securityStatus.textContent="Open the hosted HTTPS version for reliable microphone and GPS access.";}
+function collect(){return{location:val("location"),lotTract:val("lotTract"),date:val("date"),time:val("time"),elevation:val("elevation"),aspect:val("aspect"),county:val("county"),vegetation:val("vegetation"),describedBy:val("describedBy"),latitude:val("latitude"),longitude:val("longitude"),horizons:state.horizons,appSettings:{appName:"Soil Profile Field Notes",defaultReviewer:"JJ Conner",autoFillCurrentDate:true,autoFillCurrentTime:true,autoFillGPSFromDevice:true,repeatSpokenAnswerBeforeNext:true,voiceHandsFreeMode:true,continueToNextQuestionAfterAnswer:true,allowVoiceCommandNext:true,allowVoiceCommandGiveMeAnExample:true}};}function val(id){return document.getElementById(id).value;}
+function saveJSON(){const blob=new Blob([JSON.stringify(collect(),null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`Soil-Profile-Field-Notes-${val("lotTract")||"Field"}.json`;a.click();URL.revokeObjectURL(a.href);}
+function loadData(data){["location","lotTract","date","time","elevation","aspect","county","vegetation","describedBy","latitude","longitude"].forEach(k=>{if(data[k]!==undefined)document.getElementById(k).value=data[k];});state.horizons=[];(data.horizons||[]).forEach(h=>addHorizon(h));if(!state.horizons.length)addHorizon();rebuildQuestions();scheduleLocalDraftSave();}
+gpsBtn.onclick=useGPS;addHorizon.onclick=()=>addHorizon();startVoice.onclick=startVoice;stopVoice.onclick=stopVoice;nextBtn.onclick=nextQuestion;exampleBtn.onclick=giveExample;saveJson.onclick=saveJSON;loadJsonBtn.onclick=()=>loadJson.click();loadJson.onchange=async e=>{const f=e.target.files[0];if(!f)return;loadData(JSON.parse(await f.text()));};document.addEventListener("input",e=>{if(e.target.matches("input,textarea,select"))scheduleLocalDraftSave();});document.addEventListener("change",e=>{if(e.target.matches("input,textarea,select"))scheduleLocalDraftSave();});
+updateSecureContextStatus();nowDefaults();addHorizon();if(!restoreLocalDraft())scheduleLocalDraftSave();setTimeout(useGPS,600);if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost")){window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js").catch(()=>{}));}
+</script>
+</body>
+</html>
