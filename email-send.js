@@ -39,23 +39,24 @@
     }catch(e){if(e&&e.name==='AbortError')return}
     const b=new Blob([json],{type:'application/json'}),a=document.createElement('a');
     a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
-    if(window.voiceStatus)voiceStatus.textContent='Automatic email is not configured yet. Report saved to Downloads.';
+    if(window.voiceStatus)voiceStatus.textContent='Automatic email failed. Report saved to Downloads.';
     location.href='mailto:'+RECIPIENT+'?subject='+encodeURIComponent('Soil Profile Field Notes - '+safeName(data.lotTract))+'&body='+encodeURIComponent('Please attach '+name+' from Downloads.');
   }
 
   async function sendReport(){
     const data=reportData();
     const name=safeName(data.lotTract)+'.json';
+    const json=JSON.stringify(data,null,2);
     const endpoint=await readEndpoint();
     if(endpoint){
       try{
         if(window.voiceStatus)voiceStatus.textContent='Emailing report…';
-        const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fileName:name,subject:'Soil Profile Field Notes - '+safeName(data.lotTract),body:'Attached is the exported Soil Profile Field Notes report.',json:JSON.stringify(data,null,2)})});
+        const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fileName:name,subject:'Soil Profile Field Notes - '+safeName(data.lotTract),body:'Attached is the exported Soil Profile Field Notes report.',report:json,content:json})});
         const text=await r.text();
         let result={};try{result=JSON.parse(text)}catch(e){}
         if(r.ok&&result.ok){
-          if(window.voiceStatus)voiceStatus.textContent='Report emailed to '+RECIPIENT+'.';
-          alert('Report emailed to '+RECIPIENT+'.');
+          if(window.voiceStatus)voiceStatus.textContent='Report emailed with attachment to '+RECIPIENT+'.';
+          alert('Report emailed with attachment to '+RECIPIENT+'.');
           return;
         }
         throw new Error(result.error||'Email service did not confirm delivery.');
