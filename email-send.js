@@ -5,8 +5,6 @@
     return String(s||'Soil-Profile-Field-Notes').trim().replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').slice(0,120)||'Soil-Profile-Field-Notes';
   }
 
-  // Field nomenclature fixes: always use Tract/Lot/Parcel correctly and
-  // capitalize alphanumeric tract identifiers such as A1A, A1AB, A2A, etc.
   function fixedLotTract(value){
     const numberWords={zero:'0',one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9'};
     let s=String(value||'').trim();
@@ -21,12 +19,11 @@
     return s;
   }
 
-  // Replace the original normalizer used by voice entry.
   window.normalizeLotTract=fixedLotTract;
 
   async function fetchJson(url,ms){
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),ms||7000);
+    const timer=setTimeout(()=>controller.abort(),ms||8000);
     try{
       const r=await fetch(url,{signal:controller.signal,cache:'no-store'});
       if(!r.ok)throw new Error('HTTP '+r.status);
@@ -34,25 +31,43 @@
     }finally{clearTimeout(timer);}
   }
 
+  function cleanCounty(name){
+    return String(name||'').replace(/\s+County$/i,'').replace(/^County\s+/i,'').trim();
+  }
+
   async function lookupCounty(lat,lon){
-    // Primary: US Census Geocoder.
+    // Primary: BigDataCloud's free browser-side reverse geocoder. This endpoint
+    // is designed for direct client-side GPS lookups and supports browser CORS.
+    try{
+      const u='https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+'&localityLanguage=en';
+      const d=await fetchJson(u,9000);
+      const admins=(d&&d.localityInfo&&Array.isArray(d.localityInfo.administrative))?d.localityInfo.administrative:[];
+      let entry=admins.find(a=>/county/i.test(String(a.description||'')))||admins.find(a=>/county/i.test(String(a.name||'')));
+      if(entry&&entry.name){
+        const c=cleanCounty(entry.name);
+        if(c)return c;
+      }
+    }catch(e){}
+
+    // Fallback: US Census Geocoder.
     try{
       const u='https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x='+encodeURIComponent(lon)+'&y='+encodeURIComponent(lat)+'&benchmark=Public_AR_Current&vintage=Current_Current&format=json';
-      const d=await fetchJson(u,8000);
+      const d=await fetchJson(u,9000);
       const name=d&&d.result&&d.result.geographies&&d.result.geographies.Counties&&d.result.geographies.Counties[0]&&d.result.geographies.Counties[0].NAME;
-      if(name)return String(name).replace(/ County$/i,'').trim();
+      if(name)return cleanCounty(name);
     }catch(e){}
-    // Fallback: FCC Census Block API.
+
+    // Last fallback: FCC area API.
     try{
-      const u='https://geo.fcc.gov/api/census/block/find?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+'&format=json';
-      const d=await fetchJson(u,8000);
-      const name=d&&d.County&&d.County.name;
-      if(name)return String(name).replace(/ County$/i,'').trim();
+      const u='https://geo.fcc.gov/api/census/area?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon)+'&format=json';
+      const d=await fetchJson(u,9000);
+      const r=d&&Array.isArray(d.results)&&d.results[0];
+      if(r&&r.county_name)return cleanCounty(r.county_name);
     }catch(e){}
+
     return '';
   }
 
-  // GPS must populate latitude, longitude, elevation AND county from the phone location.
   window.autoGPS=async function(){
     if(!navigator.geolocation){
       if(window.voiceStatus)voiceStatus.textContent='GPS is unavailable on this device.';
@@ -65,17 +80,16 @@
       if(lonEl)lonEl.value=lon.toFixed(6);
 
       try{
-        const d=await fetchJson('https://epqs.nationalmap.gov/v1/json?x='+encodeURIComponent(lon)+'&y='+encodeURIComponent(lat)+'&units=Feet&wkid=4326',8000);
+        const d=await fetchJson('https://epqs.nationalmap.gov/v1/json?x='+encodeURIComponent(lon)+'&y='+encodeURIComponent(lat)+'&units=Feet&wkid=4326',9000);
         if(Number.isFinite(+d.value))document.getElementById('elevation').value=Math.round(+d.value);
       }catch(e){}
 
+      const countyEl=document.getElementById('county');
+      if(countyEl)countyEl.value='';
       const county=await lookupCounty(lat,lon);
-      if(county){
-        const countyEl=document.getElementById('county');
-        if(countyEl)countyEl.value=county;
-      }
+      if(countyEl&&county)countyEl.value=county;
       if(typeof save==='function')save();
-      if(window.voiceStatus)voiceStatus.textContent=county?'GPS, elevation, and county updated.':'GPS updated; county lookup did not respond. Tap Refresh GPS + Elevation + County to retry.';
+      if(window.voiceStatus)voiceStatus.textContent=county?'GPS, elevation, and county updated: '+county+'.':'GPS updated, but county lookup failed. Tap Refresh GPS + Elevation + County to retry.';
       resolve();
     },err=>{
       if(window.voiceStatus)voiceStatus.textContent='GPS permission or location lookup failed.';
@@ -104,11 +118,7 @@
     if(typeof save==='function')save();
     const data=reportData();
     const base=safeName(data.lotTract);
-    const payload={
-      fileName:base+'.json',
-      subject:'Soil Profile Field Notes - '+base,
-      report:JSON.stringify(data,null,2)
-    };
+    const payload={fileName:base+'.json',subject:'Soil Profile Field Notes - '+base,report:JSON.stringify(data,null,2)};
     try{
       if(btn){btn.disabled=true;btn.textContent='Sending…';}
       if(window.voiceStatus)voiceStatus.textContent='Sending report with attachment…';
@@ -133,6 +143,9 @@
       lot.addEventListener('change',()=>{lot.value=fixedLotTract(lot.value);if(typeof save==='function')save();});
       lot.addEventListener('blur',()=>{lot.value=fixedLotTract(lot.value);if(typeof save==='function')save();});
     }
+    // Re-run GPS after this override is installed so the County field is populated
+    // by the browser-safe lookup even if the original inline lookup failed earlier.
+    setTimeout(()=>window.autoGPS(),700);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
   setTimeout(install,500);
