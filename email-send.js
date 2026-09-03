@@ -18,6 +18,56 @@
   }
   window.normalizeLotTract=fixedLotTract;
 
+  // Restore the proven texture-dependent defaults that were in the earlier working app.
+  const textureWetStick={
+    'sand':['nonplastic','nonsticky'],
+    'loamy sand':['nonplastic','nonsticky'],
+    'sandy loam':['slightly plastic','slightly sticky'],
+    'loam':['slightly plastic','slightly sticky'],
+    'silt loam':['moderately plastic','moderately sticky'],
+    'silt':['moderately plastic','moderately sticky'],
+    'sandy clay loam':['moderately plastic','moderately sticky'],
+    'clay loam':['very plastic','very sticky'],
+    'silty clay loam':['very plastic','very sticky'],
+    'sandy clay':['very plastic','very sticky'],
+    'silty clay':['very plastic','very sticky'],
+    'clay':['very plastic','very sticky']
+  };
+  const lastTexture=[];
+
+  function cleanTexture(v){return String(v||'').toLowerCase().trim().replace(/\s+/g,' ');}
+
+  function applyTextureDefaults(i,texture,force){
+    const key=cleanTexture(texture);
+    if(!key||key==='sample')return;
+    const pair=textureWetStick[key];
+    if(!pair||typeof state==='undefined'||!state.horizons||!state.horizons[i])return;
+    const h=state.horizons[i];
+    const wet=document.querySelector('[data-h="'+i+'"][data-k="wetConsistence"]');
+    const sticky=document.querySelector('[data-h="'+i+'"][data-k="stickiness"]');
+    if(force||!String(h.wetConsistence||'').trim())h.wetConsistence=pair[0];
+    if(force||!String(h.stickiness||'').trim())h.stickiness=pair[1];
+    if(wet&&(force||!wet.value.trim()))wet.value=h.wetConsistence;
+    if(sticky&&(force||!sticky.value.trim()))sticky.value=h.stickiness;
+    if(typeof save==='function')save();
+  }
+
+  function syncTextureDefaults(){
+    if(typeof state==='undefined'||!state.horizons)return;
+    state.horizons.forEach((h,i)=>{
+      const textureEl=document.querySelector('[data-h="'+i+'"][data-k="texture"]');
+      const texture=cleanTexture(textureEl?textureEl.value:h.texture);
+      if(!texture)return;
+      if(lastTexture[i]!==texture){
+        lastTexture[i]=texture;
+        if(texture==='sample')return;
+        applyTextureDefaults(i,texture,true);
+      }else if(texture!=='sample'&&(!String(h.wetConsistence||'').trim()||!String(h.stickiness||'').trim())){
+        applyTextureDefaults(i,texture,false);
+      }
+    });
+  }
+
   async function fetchJson(url,ms){
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),ms||8000);
@@ -31,26 +81,20 @@
   function cleanCounty(name){return String(name||'').trim().replace(/ County$/i,'').replace(/ Parish$/i,'');}
 
   async function lookupCounty(lat,lon){
-    // Primary: BigDataCloud's free client-side reverse geocoder. It is designed
-    // for GPS coordinates obtained directly on the user's phone/browser.
     try{
       const u='https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+'&localityLanguage=en';
       const d=await fetchJson(u,9000);
       const admins=(d&&d.localityInfo&&Array.isArray(d.localityInfo.administrative))?d.localityInfo.administrative:[];
-      let item=admins.find(x=>/county/i.test(String(x.description||'')))||admins.find(x=>Number(x.adminLevel)===6);
-      let name=cleanCounty(item&&item.name);
+      const item=admins.find(x=>/county/i.test(String(x.description||'')))||admins.find(x=>Number(x.adminLevel)===6);
+      const name=cleanCounty(item&&item.name);
       if(name)return name;
     }catch(e){}
-
-    // Earlier working FCC fallback.
     try{
       const u='https://geo.fcc.gov/api/census/block/find?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+'&format=json';
       const d=await fetchJson(u,8000);
       const name=cleanCounty(d&&d.County&&d.County.name);
       if(name)return name;
     }catch(e){}
-
-    // Census fallback.
     try{
       const u='https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x='+encodeURIComponent(lon)+'&y='+encodeURIComponent(lat)+'&benchmark=Public_AR_Current&vintage=Current_Current&format=json';
       const d=await fetchJson(u,8000);
@@ -90,6 +134,7 @@
   };
 
   function reportData(){
+    syncTextureDefaults();
     const horizons=(typeof state!=='undefined'&&state.horizons?state.horizons:[]).map((h,i,arr)=>{const x={...h};if(i===arr.length-1)delete x.boundaryDistinctness;return x;});
     const data={horizons,depthsSet:!!(typeof state!=='undefined'&&state.depthsSet)};
     ['location','lotTract','date','time','elevation','aspect','county','vegetation','describedBy','latitude','longitude'].forEach(k=>{const el=document.getElementById(k);data[k]=el?el.value:'';});
@@ -101,6 +146,7 @@
     const btn=document.getElementById('saveJson');
     const lot=document.getElementById('lotTract');
     if(lot)lot.value=fixedLotTract(lot.value);
+    syncTextureDefaults();
     if(typeof save==='function')save();
     const data=reportData();
     const base=safeName(data.lotTract);
@@ -124,6 +170,8 @@
     setTimeout(fillCountyFromExistingCoordinates,250);
     setTimeout(fillCountyFromExistingCoordinates,1500);
     setTimeout(fillCountyFromExistingCoordinates,4000);
+    setTimeout(syncTextureDefaults,300);
+    setInterval(syncTextureDefaults,400);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
   setTimeout(install,500);
