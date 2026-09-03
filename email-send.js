@@ -1,5 +1,5 @@
 (function(){
-  const RECIPIENT='jcbowstring@hotmail.com';
+  const EMAIL_WEB_APP='https://script.google.com/macros/s/AKfycbxe02z3UaVyMFzNdbnlrAQ4rAyTRFtnwwQ8Fdd8WSVD1cEHGrk2he7PXLHemKNPo5k5/exec';
 
   function safeName(s){
     return String(s||'Soil-Profile-Field-Notes').trim().replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').slice(0,120)||'Soil-Profile-Field-Notes';
@@ -18,40 +18,33 @@
     return data;
   }
 
-  async function shareAttached(data,name){
-    const json=JSON.stringify(data,null,2);
-    // Android/Gmail is more reliable when the JSON file is shared as text/plain.
-    const file=new File([json],name,{type:'text/plain'});
-    try{if(navigator.clipboard)await navigator.clipboard.writeText(RECIPIENT)}catch(e){}
-    if(!navigator.share)return false;
-    try{
-      if(window.voiceStatus)voiceStatus.textContent='Opening share sheet with report attached…';
-      await navigator.share({
-        files:[file],
-        title:'Soil Profile Field Notes - '+safeName(data.lotTract),
-        text:'Send this report to '+RECIPIENT+'. The recipient address has been copied.'
-      });
-      return true;
-    }catch(e){
-      if(e&&e.name==='AbortError')return true;
-      return false;
-    }
-  }
-
-  async function fallbackDownload(data,name){
-    const json=JSON.stringify(data,null,2);
-    const b=new Blob([json],{type:'application/json'}),a=document.createElement('a');
-    a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
-    if(window.voiceStatus)voiceStatus.textContent='Your browser could not attach the file automatically. Report saved to Downloads.';
-    alert('This browser could not attach the file automatically. The report was saved to Downloads as '+name+'.');
-  }
-
   async function sendReport(){
+    const btn=document.getElementById('saveJson');
     const data=reportData();
-    const name=safeName(data.lotTract)+'.json';
-    const shared=await shareAttached(data,name);
-    if(shared)return;
-    await fallbackDownload(data,name);
+    const base=safeName(data.lotTract);
+    const payload={
+      fileName:base+'.json',
+      subject:'Soil Profile Field Notes - '+base,
+      report:JSON.stringify(data,null,2)
+    };
+    try{
+      if(btn){btn.disabled=true;btn.textContent='Sending…';}
+      if(window.voiceStatus)voiceStatus.textContent='Sending report with attachment…';
+      await fetch(EMAIL_WEB_APP,{
+        method:'POST',
+        mode:'no-cors',
+        cache:'no-store',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify(payload)
+      });
+      if(window.voiceStatus)voiceStatus.textContent='Report sent. Check your email for the attached JSON file.';
+      alert('Report sent. Check your email for '+payload.fileName+' attached.');
+    }catch(e){
+      if(window.voiceStatus)voiceStatus.textContent='The report could not be sent. Please try again.';
+      alert('The report could not be sent. Please try again.');
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='Export / Email Report';}
+    }
   }
 
   function install(){
