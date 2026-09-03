@@ -1,4 +1,4 @@
-const CACHE_NAME='soil-profile-field-notes-v11';
+const CACHE_NAME='soil-profile-field-notes-v12';
 const ASSETS=['./manifest.webmanifest'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
@@ -26,9 +26,15 @@ function patchApp(html){
   html=html.replace("const v=String(val(qs[i])||'').trim();if(!v||", "const v=String(val(qs[i])||'').trim();if((qs[i].key==='wetConsistence'||qs[i].key==='stickiness')&&words(state.horizons[qs[i].i]?.texture)==='sample')continue;if(!v||");
   html=html.replace("function handle(t){closeMic();const x=words(t);", "function pauseVoice(){state.voiceActive=false;closeMic();state.speaking=false;if('speechSynthesis'in window)speechSynthesis.cancel();voiceStatus.textContent='Paused. Tap Resume to continue.';currentQuestion.textContent=currentQ()?.q||currentQuestion.textContent;}function resumeVoice(){if(state.voiceActive)return;state.voiceActive=true;voiceStatus.textContent='Resuming…';const q=currentQ();if(q){currentQuestion.textContent=q.q;focus(q);setTimeout(listen,100)}else nextStep(50)}function handle(t){closeMic();const x=words(t);if(x==='pause'||x==='hold on'||x==='hold'){pauseVoice();return;}");
   html=html.replace("$('startVoice').onclick=start;$('stopVoice').onclick=stop;", "$('startVoice').onclick=start;$('stopVoice').onclick=stop;$('resumeVoice').onclick=resumeVoice;");
-  html=html.replace('Build 2026-09-02 · Rock Size Voice Fix','Build 2026-09-02 · Pause Resume + GPS County');
-  html=html.replace('Build 2026-09-02 · GPS County + Lab Sample','Build 2026-09-02 · Pause Resume + GPS County');
-  html=html.replace('Build 2026-09-02 · Lab Sample + Voice Fixes','Build 2026-09-02 · Pause Resume + GPS County');
+
+  const shareHelper="async function saveAndShareJSON(){saveJSON();const data={horizons:state.horizons.map((h,i)=>{const x={...h};if(i===state.horizons.length-1)delete x.boundaryDistinctness;return x}),depthsSet:state.depthsSet};['location','lotTract','date','time','elevation','aspect','county','vegetation','describedBy','latitude','longitude'].forEach(k=>data[k]=$(k).value);const name=safeFileName($('lotTract').value)+'.json';const file=new File([JSON.stringify(data,null,2)],name,{type:'application/json'});try{if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Soil Profile Field Notes',text:'Please email this soil field notes JSON to jcbowstring@hotmail.com'});return;}}catch(e){if(e&&e.name==='AbortError')return;}const subject=encodeURIComponent('Soil Profile Field Notes - '+safeFileName($('lotTract').value));const body=encodeURIComponent('The JSON file was saved to this device. Please attach it to this email.');location.href='mailto:jcbowstring@hotmail.com?subject='+subject+'&body='+body;}";
+  if(!html.includes('async function saveAndShareJSON()'))html=html.replace('async function newBlank(){',shareHelper+'async function newBlank(){');
+  html=html.replace("$('saveJson').onclick=saveJSON", "$('saveJson').onclick=saveAndShareJSON");
+
+  html=html.replace('Build 2026-09-02 · Rock Size Voice Fix','Build 2026-09-02 · Save + Email JSON');
+  html=html.replace('Build 2026-09-02 · GPS County + Lab Sample','Build 2026-09-02 · Save + Email JSON');
+  html=html.replace('Build 2026-09-02 · Lab Sample + Voice Fixes','Build 2026-09-02 · Save + Email JSON');
+  html=html.replace('Build 2026-09-02 · Pause Resume + GPS County','Build 2026-09-02 · Save + Email JSON');
   return html;
 }
 
