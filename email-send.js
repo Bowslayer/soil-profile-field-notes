@@ -1,9 +1,7 @@
 (function(){
   const EMAIL_WEB_APP='https://script.google.com/macros/s/AKfycbxe02z3UaVyMFzNdbnlrAQ4rAyTRFtnwwQ8Fdd8WSVD1cEHGrk2he7PXLHemKNPo5k5/exec';
 
-  function safeName(s){
-    return String(s||'Soil-Profile-Field-Notes').trim().replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').slice(0,120)||'Soil-Profile-Field-Notes';
-  }
+  function safeName(s){return String(s||'Soil-Profile-Field-Notes').trim().replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').slice(0,120)||'Soil-Profile-Field-Notes';}
 
   function fixedLotTract(value){
     const numberWords={zero:'0',one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9'};
@@ -22,7 +20,7 @@
 
   async function fetchJson(url,ms){
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),ms||7000);
+    const timer=setTimeout(()=>controller.abort(),ms||8000);
     try{
       const r=await fetch(url,{signal:controller.signal,cache:'no-store'});
       if(!r.ok)throw new Error('HTTP '+r.status);
@@ -33,13 +31,25 @@
   function cleanCounty(name){return String(name||'').trim().replace(/ County$/i,'').replace(/ Parish$/i,'');}
 
   async function lookupCounty(lat,lon){
-    // This is the FCC endpoint used by the earlier working county-auto-fill version.
+    // Primary: BigDataCloud's free client-side reverse geocoder. It is designed
+    // for GPS coordinates obtained directly on the user's phone/browser.
+    try{
+      const u='https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+'&localityLanguage=en';
+      const d=await fetchJson(u,9000);
+      const admins=(d&&d.localityInfo&&Array.isArray(d.localityInfo.administrative))?d.localityInfo.administrative:[];
+      let item=admins.find(x=>/county/i.test(String(x.description||'')))||admins.find(x=>Number(x.adminLevel)===6);
+      let name=cleanCounty(item&&item.name);
+      if(name)return name;
+    }catch(e){}
+
+    // Earlier working FCC fallback.
     try{
       const u='https://geo.fcc.gov/api/census/block/find?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+'&format=json';
       const d=await fetchJson(u,8000);
       const name=cleanCounty(d&&d.County&&d.County.name);
       if(name)return name;
     }catch(e){}
+
     // Census fallback.
     try{
       const u='https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x='+encodeURIComponent(lon)+'&y='+encodeURIComponent(lat)+'&benchmark=Public_AR_Current&vintage=Current_Current&format=json';
@@ -60,45 +70,29 @@
   }
 
   window.autoGPS=async function(){
-    if(!navigator.geolocation){
-      if(window.voiceStatus)voiceStatus.textContent='GPS is unavailable on this device.';
-      return;
-    }
+    if(!navigator.geolocation){if(window.voiceStatus)voiceStatus.textContent='GPS is unavailable on this device.';return;}
     return new Promise(resolve=>navigator.geolocation.getCurrentPosition(async p=>{
       const lat=p.coords.latitude,lon=p.coords.longitude;
       const latEl=document.getElementById('latitude'),lonEl=document.getElementById('longitude');
       if(latEl)latEl.value=lat.toFixed(6);
       if(lonEl)lonEl.value=lon.toFixed(6);
-
       try{
         const d=await fetchJson('https://epqs.nationalmap.gov/v1/json?x='+encodeURIComponent(lon)+'&y='+encodeURIComponent(lat)+'&units=Feet&wkid=4326',8000);
         if(Number.isFinite(+d.value))document.getElementById('elevation').value=Math.round(+d.value);
       }catch(e){}
-
       const county=await lookupCounty(lat,lon);
-      if(county){
-        const countyEl=document.getElementById('county');
-        if(countyEl)countyEl.value=county;
-      }
+      const countyEl=document.getElementById('county');
+      if(county&&countyEl)countyEl.value=county;
       if(typeof save==='function')save();
-      if(window.voiceStatus)voiceStatus.textContent=county?'GPS, elevation, and county updated.':'GPS updated; county lookup did not respond. Tap Refresh GPS + Elevation + County to retry.';
+      if(window.voiceStatus)voiceStatus.textContent=county?'GPS, elevation, and county updated.':'GPS updated; county lookup failed. Tap Refresh GPS + Elevation + County to retry.';
       resolve();
-    },err=>{
-      if(window.voiceStatus)voiceStatus.textContent='GPS permission or location lookup failed.';
-      resolve();
-    },{enableHighAccuracy:true,timeout:15000,maximumAge:0}));
+    },()=>{if(window.voiceStatus)voiceStatus.textContent='GPS permission or location lookup failed.';resolve();},{enableHighAccuracy:true,timeout:15000,maximumAge:0}));
   };
 
   function reportData(){
-    const horizons=(typeof state!=='undefined'&&state.horizons?state.horizons:[]).map((h,i,arr)=>{
-      const x={...h};
-      if(i===arr.length-1)delete x.boundaryDistinctness;
-      return x;
-    });
+    const horizons=(typeof state!=='undefined'&&state.horizons?state.horizons:[]).map((h,i,arr)=>{const x={...h};if(i===arr.length-1)delete x.boundaryDistinctness;return x;});
     const data={horizons,depthsSet:!!(typeof state!=='undefined'&&state.depthsSet)};
-    ['location','lotTract','date','time','elevation','aspect','county','vegetation','describedBy','latitude','longitude'].forEach(k=>{
-      const el=document.getElementById(k);data[k]=el?el.value:'';
-    });
+    ['location','lotTract','date','time','elevation','aspect','county','vegetation','describedBy','latitude','longitude'].forEach(k=>{const el=document.getElementById(k);data[k]=el?el.value:'';});
     if(data.lotTract)data.lotTract=fixedLotTract(data.lotTract);
     return data;
   }
@@ -120,24 +114,16 @@
     }catch(e){
       if(window.voiceStatus)voiceStatus.textContent='The report could not be submitted. Please try again.';
       alert('The report could not be submitted. Please try again.');
-    }finally{
-      if(btn){btn.disabled=false;btn.textContent='Export / Email Report';}
-    }
+    }finally{if(btn){btn.disabled=false;btn.textContent='Export / Email Report';}}
   }
 
   function install(){
-    const btn=document.getElementById('saveJson');
-    if(btn){btn.textContent='Export / Email Report';btn.onclick=sendReport;}
-    const gps=document.getElementById('gpsBtn');
-    if(gps)gps.onclick=window.autoGPS;
-    const lot=document.getElementById('lotTract');
-    if(lot){
-      lot.addEventListener('change',()=>{lot.value=fixedLotTract(lot.value);if(typeof save==='function')save();});
-      lot.addEventListener('blur',()=>{lot.value=fixedLotTract(lot.value);if(typeof save==='function')save();});
-    }
-    // If the base app already got GPS before this helper loaded, fill County now.
+    const btn=document.getElementById('saveJson');if(btn){btn.textContent='Export / Email Report';btn.onclick=sendReport;}
+    const gps=document.getElementById('gpsBtn');if(gps)gps.onclick=window.autoGPS;
+    const lot=document.getElementById('lotTract');if(lot){lot.addEventListener('change',()=>{lot.value=fixedLotTract(lot.value);if(typeof save==='function')save();});lot.addEventListener('blur',()=>{lot.value=fixedLotTract(lot.value);if(typeof save==='function')save();});}
     setTimeout(fillCountyFromExistingCoordinates,250);
     setTimeout(fillCountyFromExistingCoordinates,1500);
+    setTimeout(fillCountyFromExistingCoordinates,4000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
   setTimeout(install,500);
