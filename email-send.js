@@ -34,14 +34,13 @@
         method:'POST',
         mode:'no-cors',
         cache:'no-store',
-        headers:{'Content-Type':'text/plain;charset=utf-8'},
         body:JSON.stringify(payload)
       });
-      if(window.voiceStatus)voiceStatus.textContent='Report sent. Check your email for the attached JSON file.';
-      alert('Report sent. Check your email for '+payload.fileName+' attached.');
+      if(window.voiceStatus)voiceStatus.textContent='Report submitted to the email service.';
+      alert('Report submitted. Check your email for '+payload.fileName+'.');
     }catch(e){
-      if(window.voiceStatus)voiceStatus.textContent='The report could not be sent. Please try again.';
-      alert('The report could not be sent. Please try again.');
+      if(window.voiceStatus)voiceStatus.textContent='The report could not be submitted. Please try again.';
+      alert('The report could not be submitted. Please try again.');
     }finally{
       if(btn){btn.disabled=false;btn.textContent='Export / Email Report';}
     }
