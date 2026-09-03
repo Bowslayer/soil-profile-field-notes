@@ -1,4 +1,4 @@
-const CACHE_NAME='soil-profile-field-notes-v9';
+const CACHE_NAME='soil-profile-field-notes-v10';
 const ASSETS=['./manifest.webmanifest'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
@@ -18,14 +18,19 @@ function patchApp(html){
   const textureHelper="const textureWetStick={'sand':['nonplastic','nonsticky'],'loamy sand':['nonplastic','nonsticky'],'sandy loam':['slightly plastic','slightly sticky'],'loam':['slightly plastic','slightly sticky'],'silt loam':['moderately plastic','moderately sticky'],'silt':['moderately plastic','moderately sticky'],'sandy clay loam':['moderately plastic','moderately sticky'],'clay loam':['very plastic','very sticky'],'silty clay loam':['very plastic','very sticky'],'sandy clay':['very plastic','very sticky'],'silty clay':['very plastic','very sticky'],'clay':['very plastic','very sticky']};function applyTextureDefaults(i,t){if(!state.horizons[i])return;const h=state.horizons[i];const wet=document.querySelector('[data-h=\"'+i+'\"][data-k=\"wetConsistence\"]');const sticky=document.querySelector('[data-h=\"'+i+'\"][data-k=\"stickiness\"]');if(words(t)==='sample'){h.wetConsistence='';h.stickiness='';if(wet)wet.value='';if(sticky)sticky.value='';return;}const texture=closest(t,vocab.texture);const pair=textureWetStick[texture];if(!pair)return;h.wetConsistence=pair[0];h.stickiness=pair[1];if(wet)wet.value=pair[0];if(sticky)sticky.value=pair[1];}";
   if(!html.includes('const textureWetStick='))html=html.replace(marker,textureHelper+marker);
 
+  const countyHelper="async function fillCounty(lat,lon){if($('county').value)return;try{const r=await fetchWithTimeout('https://geo.fcc.gov/api/census/block/find?latitude='+lat+'&longitude='+lon+'&format=json',7000);const d=await r.json();const name=d?.County?.name||'';if(name)$('county').value=name.replace(/ County$/i,'')}catch(e){}}";
+  if(!html.includes('async function fillCounty('))html=html.replace('async function autoGPS(){',countyHelper+'async function autoGPS(){');
+  html=html.replace("}catch(e){}save();res()", "}catch(e){}if(!$('county').value)await fillCounty(lat,lon);save();res()");
+
   html=html.replace("x.value=h[k]||'';x.oninput=()=>{h[k]=x.value;save()};", "x.value=h[k]||'';if(k==='texture'&&words(x.value)==='sample')x.classList.add('sample-pending');x.oninput=()=>{h[k]=x.value;if(k==='texture'){applyTextureDefaults(i,x.value);x.classList.toggle('sample-pending',words(x.value)==='sample')}save()};");
   html=html.replace("if(q.scope==='detail')$(q.key).value=v;else state.horizons[q.i][q.key]=v;const e=elem(q);", "if(q.scope==='detail')$(q.key).value=v;else{state.horizons[q.i][q.key]=v;if(q.key==='texture')applyTextureDefaults(q.i,v)}const e=elem(q);if(e&&q.key==='texture')e.classList.toggle('sample-pending',words(v)==='sample');");
   html=html.replace("const v=String(val(qs[i])||'').trim();if(!v||", "const v=String(val(qs[i])||'').trim();if((qs[i].key==='wetConsistence'||qs[i].key==='stickiness')&&words(state.horizons[qs[i].i]?.texture)==='sample')continue;if(!v||");
 
-  html=html.replace('Build 2026-09-02 · Rock Size Voice Fix','Build 2026-09-02 · Lab Sample + Voice Fixes');
-  html=html.replace('Build 2026-09-02 · Texture Auto-Fill','Build 2026-09-02 · Lab Sample + Voice Fixes');
-  html=html.replace('Build 2026-09-02 · Munsell Compact Voice Fix','Build 2026-09-02 · Lab Sample + Voice Fixes');
-  html=html.replace('Build 2026-09-02 · Tract Parcel Lot Voice Fix','Build 2026-09-02 · Lab Sample + Voice Fixes');
+  html=html.replace('Build 2026-09-02 · Rock Size Voice Fix','Build 2026-09-02 · GPS County + Lab Sample');
+  html=html.replace('Build 2026-09-02 · Lab Sample + Voice Fixes','Build 2026-09-02 · GPS County + Lab Sample');
+  html=html.replace('Build 2026-09-02 · Texture Auto-Fill','Build 2026-09-02 · GPS County + Lab Sample');
+  html=html.replace('Build 2026-09-02 · Munsell Compact Voice Fix','Build 2026-09-02 · GPS County + Lab Sample');
+  html=html.replace('Build 2026-09-02 · Tract Parcel Lot Voice Fix','Build 2026-09-02 · GPS County + Lab Sample');
   return html;
 }
 
