@@ -1,4 +1,4 @@
-const CACHE_NAME='soil-profile-field-notes-v13';
+const CACHE_NAME='soil-profile-field-notes-v14';
 const ASSETS=['./manifest.webmanifest'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
@@ -9,6 +9,7 @@ function patchApp(html){
   html=html.replace(oldFn,newFn);
   html=html.replace('.active-field{outline:3px solid currentColor;outline-offset:2px}', '.active-field{outline:3px solid currentColor;outline-offset:2px}.sample-pending{background:#c8f7c5!important;border-color:#2e7d32!important}');
   html=html.replace('<button id="stopVoice">Stop</button>','<button id="stopVoice">Stop</button><button id="resumeVoice">Resume</button>');
+  html=html.replace('Save Field Notes JSON','Export / Email Report');
   html=html.replace("texture:'Options are sand, loamy sand, sandy loam, loam, silt loam, silt, sandy clay loam, clay loam, silty clay loam, sandy clay, silty clay, or clay.'", "texture:'Options are sand, loamy sand, sandy loam, loam, silt loam, silt, sandy clay loam, clay loam, silty clay loam, sandy clay, silty clay, clay, or say sample if a lab sample is needed.'");
   html=html.replace("rockSize:'Just say the number of inches. For example, say 5 and I will enter up to 5 in, or say 10 and I will enter up to 10 in.'", "rockSize:'Just say the number of inches. For example, say 5 and I will enter up to 5 inches, or say 10 and I will enter up to 10 inches.'");
   html=html.replace("return n?`up to ${n} in`:t", "return n?`up to ${n} inches`:t");
@@ -27,15 +28,17 @@ function patchApp(html){
   html=html.replace("function handle(t){closeMic();const x=words(t);", "function pauseVoice(){state.voiceActive=false;closeMic();state.speaking=false;if('speechSynthesis'in window)speechSynthesis.cancel();voiceStatus.textContent='Paused. Tap Resume to continue.';currentQuestion.textContent=currentQ()?.q||currentQuestion.textContent;}function resumeVoice(){if(state.voiceActive)return;state.voiceActive=true;voiceStatus.textContent='Resuming…';const q=currentQ();if(q){currentQuestion.textContent=q.q;focus(q);setTimeout(listen,100)}else nextStep(50)}function handle(t){closeMic();const x=words(t);if(x==='pause'||x==='hold on'||x==='hold'){pauseVoice();return;}");
   html=html.replace("$('startVoice').onclick=start;$('stopVoice').onclick=stop;", "$('startVoice').onclick=start;$('stopVoice').onclick=stop;$('resumeVoice').onclick=resumeVoice;");
 
-  const shareHelper="async function saveAndShareJSON(){saveJSON();const data={horizons:state.horizons.map((h,i)=>{const x={...h};if(i===state.horizons.length-1)delete x.boundaryDistinctness;return x}),depthsSet:state.depthsSet};['location','lotTract','date','time','elevation','aspect','county','vegetation','describedBy','latitude','longitude'].forEach(k=>data[k]=$(k).value);const name=safeFileName($('lotTract').value)+'.json';const file=new File([JSON.stringify(data,null,2)],name,{type:'application/json'});try{if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Soil Profile Field Notes',text:'Please email this soil field notes JSON to jcbowstring@hotmail.com'});return;}}catch(e){if(e&&e.name==='AbortError')return;}const subject=encodeURIComponent('Soil Profile Field Notes - '+safeFileName($('lotTract').value));const body=encodeURIComponent('The JSON file was saved to this device. Please attach it to this email.');location.href='mailto:jcbowstring@hotmail.com?subject='+subject+'&body='+body;}";
-  if(!html.includes('async function saveAndShareJSON()'))html=html.replace('async function newBlank(){',shareHelper+'async function newBlank(){');
+  const shareHelper="async function saveAndShareJSON(){const data={horizons:state.horizons.map((h,i)=>{const x={...h};if(i===state.horizons.length-1)delete x.boundaryDistinctness;return x}),depthsSet:state.depthsSet};['location','lotTract','date','time','elevation','aspect','county','vegetation','describedBy','latitude','longitude'].forEach(k=>data[k]=$(k).value);const name=safeFileName($('lotTract').value)+'.json';const file=new File([JSON.stringify(data,null,2)],name,{type:'application/json'});try{if(navigator.clipboard)await navigator.clipboard.writeText('jcbowstring@hotmail.com')}catch(e){}try{if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){voiceStatus.textContent='Report attached. Choose Gmail. Recipient address copied.';await navigator.share({files:[file],title:'Soil Profile Field Notes - '+safeFileName($('lotTract').value),text:'Send this soil profile report to jcbowstring@hotmail.com'});return;}}catch(e){if(e&&e.name==='AbortError')return;}const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);voiceStatus.textContent='Report saved to Downloads. Email is opening; attach '+name+'.';const subject=encodeURIComponent('Soil Profile Field Notes - '+safeFileName($('lotTract').value));const body=encodeURIComponent('The report file '+name+' was saved to Downloads. Please attach it to this email.');location.href='mailto:jcbowstring@hotmail.com?subject='+subject+'&body='+body;}";
+  const oldShare=/async function saveAndShareJSON\(\)\{[\s\S]*?\}(?=async function newBlank\(\))/;
+  if(oldShare.test(html))html=html.replace(oldShare,shareHelper);else if(!html.includes('async function saveAndShareJSON()'))html=html.replace('async function newBlank(){',shareHelper+'async function newBlank(){');
   html=html.replace("$('saveJson').onclick=saveJSON", "$('saveJson').onclick=saveAndShareJSON");
 
-  html=html.replace('Build 2026-09-02 · Rock Size Voice Fix','Build 2026-09-03 · Sample Fields Highlight');
-  html=html.replace('Build 2026-09-02 · GPS County + Lab Sample','Build 2026-09-03 · Sample Fields Highlight');
-  html=html.replace('Build 2026-09-02 · Lab Sample + Voice Fixes','Build 2026-09-03 · Sample Fields Highlight');
-  html=html.replace('Build 2026-09-02 · Pause Resume + GPS County','Build 2026-09-03 · Sample Fields Highlight');
-  html=html.replace('Build 2026-09-02 · Save + Email JSON','Build 2026-09-03 · Sample Fields Highlight');
+  html=html.replace('Build 2026-09-02 · Rock Size Voice Fix','Build 2026-09-03 · Direct Email Attachment');
+  html=html.replace('Build 2026-09-02 · GPS County + Lab Sample','Build 2026-09-03 · Direct Email Attachment');
+  html=html.replace('Build 2026-09-02 · Lab Sample + Voice Fixes','Build 2026-09-03 · Direct Email Attachment');
+  html=html.replace('Build 2026-09-02 · Pause Resume + GPS County','Build 2026-09-03 · Direct Email Attachment');
+  html=html.replace('Build 2026-09-02 · Save + Email JSON','Build 2026-09-03 · Direct Email Attachment');
+  html=html.replace('Build 2026-09-03 · Sample Fields Highlight','Build 2026-09-03 · Direct Email Attachment');
   return html;
 }
 
