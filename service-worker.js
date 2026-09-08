@@ -1,7 +1,19 @@
-const CACHE_NAME='soil-profile-field-notes-v19';
+const CACHE_NAME='soil-profile-field-notes-v20';
 
 self.addEventListener('install',event=>{
-  self.skipWaiting();
+  event.waitUntil((async()=>{
+    const cache=await caches.open(CACHE_NAME);
+    try{
+      const response=await fetch('./',{cache:'no-store'});
+      if(response.ok){
+        const html=patchApp(await response.text());
+        await cache.put('./',new Response(html,{status:response.status,statusText:response.statusText,headers:{'content-type':'text/html; charset=utf-8'}}));
+        await cache.put('./index.html',new Response(html,{status:response.status,statusText:response.statusText,headers:{'content-type':'text/html; charset=utf-8'}}));
+      }
+    }catch(e){}
+    try{await cache.add('./manifest.webmanifest')}catch(e){}
+    self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate',event=>{
@@ -39,9 +51,24 @@ self.addEventListener('fetch',event=>{
   if(req.mode==='navigate'){
     event.respondWith(fetch(req,{cache:'no-store'}).then(async response=>{
       const html=patchApp(await response.text());
-      return new Response(html,{status:response.status,statusText:response.statusText,headers:{'content-type':'text/html; charset=utf-8'}});
-    }).catch(()=>caches.match(req)));
+      const patched=new Response(html,{status:response.status,statusText:response.statusText,headers:{'content-type':'text/html; charset=utf-8'}});
+      const copy=patched.clone();
+      caches.open(CACHE_NAME).then(cache=>{
+        cache.put('./',copy.clone());
+        cache.put('./index.html',copy);
+      }).catch(()=>{});
+      return patched;
+    }).catch(async()=>{
+      const cached=await caches.match(req);
+      return cached||await caches.match('./')||await caches.match('./index.html');
+    }));
     return;
   }
-  event.respondWith(fetch(req,{cache:'no-store'}).catch(()=>caches.match(req)));
+  event.respondWith(fetch(req,{cache:'no-store'}).then(response=>{
+    if(response.ok&&new URL(req.url).origin===self.location.origin){
+      const copy=response.clone();
+      caches.open(CACHE_NAME).then(cache=>cache.put(req,copy)).catch(()=>{});
+    }
+    return response;
+  }).catch(()=>caches.match(req)));
 });
