@@ -1,4 +1,4 @@
-const CACHE_NAME='soil-profile-field-notes-v24';
+const CACHE_NAME='soil-profile-field-notes-v25';
 
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
@@ -25,10 +25,11 @@ self.addEventListener('activate',event=>{
 });
 
 function patchApp(html){
-  html=html.replace('Build 2026-09-08 · Version 20','Build 2026-09-08 · Version 24');
-  html=html.replace('Build 2026-09-08 · Version 21','Build 2026-09-08 · Version 24');
-  html=html.replace('Build 2026-09-08 · Version 22','Build 2026-09-08 · Version 24');
-  html=html.replace('Build 2026-09-08 · Version 23','Build 2026-09-08 · Version 24');
+  html=html.replace('Build 2026-09-08 · Version 20','Build 2026-09-09 · Version 25');
+  html=html.replace('Build 2026-09-08 · Version 21','Build 2026-09-09 · Version 25');
+  html=html.replace('Build 2026-09-08 · Version 22','Build 2026-09-09 · Version 25');
+  html=html.replace('Build 2026-09-08 · Version 23','Build 2026-09-09 · Version 25');
+  html=html.replace('Build 2026-09-08 · Version 24','Build 2026-09-09 · Version 25');
 
   // Keep the current Subdivision Name wording while preserving the saved/report key.
   html=html.replace('<label>Location</label><input id="location">','<label>Subdivision Name</label><input id="location">');
@@ -56,14 +57,15 @@ function patchApp(html){
 
   // Preserve the multi-horizon depth entry behavior.
   const oldDepthFn="function setDepths(t){const n=(t.match(/\\d+(?:\\.\\d+)?/g)||[]);if(n.length<2){speak('Please say the horizon depths again.',()=>listen());return}const r=[];for(let i=0;i+1<n.length;i+=2)r.push([n[i],n[i+1]]);state.horizons=r.map(x=>blank({top:x[0],bottom:x[1]}));state.depthsSet=true;render();save();state.mode='depthConfirm';state.pending=r;speak(r.map(x=>x[0]+' to '+x[1]).join(', ')+'. Is that correct?',()=>setTimeout(listen,100))}";
-  const newDepthFn="function setDepths(t){const raw=String(t||'').toLowerCase().replace(/inches?|inch|\\bin\\b/g,' ').replace(/through|thru|–|—|-/g,' to ');let r=[];const re=/(\\d+(?:\\.\\d+)?)\\s*(?:to)\\s*(\\d+(?:\\.\\d+)?)/g;let m;while((m=re.exec(raw)))r.push([m[1],m[2]]);if(!r.length){const n=(raw.match(/\\d+(?:\\.\\d+)?/g)||[]);if(n.length>=2){for(let i=0;i+1<n.length;i+=2)r.push([n[i],n[i+1]])}}if(!r.length){speak('Please say the horizon depths again. For example, 0 inches to 9 inches, 9 inches to 45 inches, 45 inches to 98 inches.',()=>listen());return}state.horizons=r.map(x=>blank({top:x[0],bottom:x[1]}));state.depthsSet=true;render();save();state.mode='depthConfirm';state.pending=r;speak(r.map(x=>x[0]+' to '+x[1]+' inches').join(', ')+'. Is that correct?',()=>setTimeout(listen,250))}";
+  const newDepthFn="function setDepths(t){const raw=String(t||'').toLowerCase().replace(/inches?|inch|\\bin\\b/g,' ').replace(/through|thru|–|—|-/g,' to ');let r=[];const re=/(\\d+(?:\\.\\d+)?)\\s*(?:to)\\s*(\\d+(?:\\.\\d+)?)/g;let m;while((m=re.exec(raw)))r.push([m[1],m[2]]);if(!r.length){const n=(raw.match(/\\d+(?:\\.\\d+)?/g)||[]);if(n.length>=2){for(let i=0;i+1<n.length;i+=2)r.push([n[i],n[i+1]])}}if(!r.length){speak('Please say the horizon depths again. For example, 0 inches to 9 inches, 9 inches to 45 inches, 45 inches to 98 inches.',()=>listen());return}state.horizons=r.map(x=>blank({top:x[0],bottom:x[1]}));state.depthsSet=true;render();save();state.mode='depthConfirm';state.pending=r;speak(r.map(x=>x[0]+' to '+x[1]+' inches').join(', ')+'. Is that correct?',()=>setTimeout(listen,navigator.onLine?250:1200))}";
   html=html.replace(oldDepthFn,newDepthFn);
   const oldHandleStart="function handle(t){closeMic();const x=words(t);";
   const newHandleStart="function handle(t){closeMic();const x=words(t);const rangeCount=(String(t||'').match(/(?:\\d+(?:\\.\\d+)?)\\s*(?:inches?|inch|in)?\\s*(?:to|through|thru|[-–—])\\s*(?:\\d+(?:\\.\\d+)?)/gi)||[]).length;if(rangeCount>=2)return setDepths(t);";
   html=html.replace(oldHandleStart,newHandleStart);
 
-  // Keep the Version 22 one-answer -> confirm -> next-question voice flow unchanged.
-  html=html.replaceAll('setTimeout(listen,100)','setTimeout(listen,250)');
+  // Only speech timing change in Version 25: wait longer before reopening the mic while offline.
+  html=html.replaceAll('setTimeout(listen,100)','setTimeout(listen,navigator.onLine?250:1200)');
+  html=html.replaceAll('setTimeout(listen,250)','setTimeout(listen,navigator.onLine?250:1200)');
   return html;
 }
 
