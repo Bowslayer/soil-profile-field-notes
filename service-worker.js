@@ -1,4 +1,4 @@
-const CACHE_NAME='soil-profile-field-notes-v25';
+const CACHE_NAME='soil-profile-field-notes-v26';
 
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
@@ -25,6 +25,8 @@ self.addEventListener('activate',event=>{
 });
 
 function patchApp(html){
+  // Version 26: preserve Version 25 workflow and add a manual horizon-count fallback.
+  html=html.replace('Build 2026-09-23 · Version 21','Build 2026-09-23 · Version 26');
   html=html.replace('Build 2026-09-08 · Version 20','Build 2026-09-09 · Version 25');
   html=html.replace('Build 2026-09-08 · Version 21','Build 2026-09-09 · Version 25');
   html=html.replace('Build 2026-09-08 · Version 22','Build 2026-09-09 · Version 25');
@@ -71,6 +73,12 @@ function patchApp(html){
   const oldHandle="function handle(t){closeMic();const x=words(t);if(isExample(x)){if(state.mode==='confirm'){state.mode='answer';state.pending=null}return giveExample()}if(state.mode==='depths')return setDepths(t);if(state.mode==='depthConfirm'){if(yes(x)){state.mode='answer';return nextStep()}if(no(x)){state.depthsSet=false;state.horizons=[];render();save();return askDepths()}return setDepths(t)}if(state.mode==='confirm'){if(no(x)){state.mode='correct';voiceStatus.textContent='Listening for correction…';return setTimeout(listen,80)}if(yes(x)){state.mode='answer';state.pending=null;return nextStep()}const v=apply(t);state.pending=v;return speak(v+'. Is that correct?',()=>setTimeout(listen,100))}if(state.mode==='correct'){const v=apply(t);state.pending=v;state.mode='confirm';return speak(v+'. Is that correct?',()=>setTimeout(listen,100))}if(x==='next')return nextStep();const v=apply(t);state.pending=v;state.mode='confirm';speak(v+'. Is that correct?',()=>setTimeout(listen,100))}";
   const newHandle="function handle(t){closeMic();const x=words(t);if(isExample(x)){if(state.mode==='confirm'){state.mode='answer';state.pending=null}return giveExample()}if(state.mode==='horizonCount')return setHorizonCount(t);if(state.mode==='horizonCountConfirm'){if(yes(x)){const n=state.pending;state.pending=null;return beginHorizonDepths(n)}if(no(x)){state.pending=null;return askHorizonCount()}return setHorizonCount(t)}if(state.mode==='horizonDepth')return parseHorizonDepth(t);if(state.mode==='horizonDepthConfirm'){if(yes(x)){const pair=state.pending;state.pending=null;return saveHorizonDepth(pair)}if(no(x)){state.pending=null;return askOneHorizonDepth()}return parseHorizonDepth(t)}if(state.mode==='confirm'){if(no(x)){state.mode='correct';voiceStatus.textContent='Listening for correction…';return setTimeout(listen,80)}if(yes(x)){state.mode='answer';state.pending=null;return nextStep()}const v=apply(t);state.pending=v;return speak(v+'. Is that correct?',()=>setTimeout(listen,100))}if(state.mode==='correct'){const v=apply(t);state.pending=v;state.mode='confirm';return speak(v+'. Is that correct?',()=>setTimeout(listen,100))}if(x==='next')return nextStep();const v=apply(t);state.pending=v;state.mode='confirm';speak(v+'. Is that correct?',()=>setTimeout(listen,100))}";
   html=html.replace(oldHandle,newHandle);
+
+  // Add manual Number of Horizons field to the Version 25 app. This provides a fallback when speech recognition will not accept the count.
+  html=html.replace('<section class="card"><h2>Soil Horizons</h2><div id="horizons"></div></section>','<section class="card"><h2>Soil Horizons</h2><div class="row" style="align-items:end;margin-bottom:12px"><div style="min-width:220px"><label for="horizonCountManual">Number of Horizons</label><input id="horizonCountManual" type="number" min="1" max="20" inputmode="numeric" placeholder="Enter number"></div><button id="setHorizonCountManual">Set Horizons</button></div><div class="muted" style="margin-bottom:10px">If voice entry does not accept the number of horizons, enter it here and continue manually.</div><div id="horizons"></div></section>');
+  const manualFn="function setManualHorizonCount(){const e=$('horizonCountManual');const n=Number(e&&e.value);if(!Number.isInteger(n)||n<1||n>20){voiceStatus.textContent='Enter a number of horizons from 1 to 20.';return}state.horizons=Array.from({length:n},(_,i)=>blank(state.horizons[i]||{}));state.depthIndex=0;state.depthsSet=false;state.mode='horizonDepth';state.pending=null;render();save();voiceStatus.textContent=n+' horizon'+(n===1?'':'s')+' created. Enter the top and bottom depths manually below, or continue hands-free.';currentQuestion.textContent='Manual horizon entry ready.';}";
+  if(!html.includes('function setManualHorizonCount()'))html=html.replace('async function releaseWakeLock()',manualFn+'async function releaseWakeLock()');
+  html=html.replace("$('startVoice').onclick=start;","$('setHorizonCountManual').onclick=setManualHorizonCount;$('horizonCountManual').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();setManualHorizonCount()}};$('startVoice').onclick=start;");
 
   // Keep the established voice timing unchanged.
   html=html.replaceAll('setTimeout(listen,100)','setTimeout(listen,250)');
